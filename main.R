@@ -17,6 +17,7 @@ setwd(".")
 # Project Preparations ------------------------------------------------------------------------
 
 cat("Preparing project data: \n")
+source("scripts/00-setups.R")
 source("scripts/01-load-raw-data.R")
 source("scripts/02-define-variables.R")
 source("scripts/03-construct-data.R")

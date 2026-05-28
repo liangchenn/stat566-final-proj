@@ -176,7 +176,7 @@ stargazer(
         "NOTE: Cells report mean or proportion with standard error in parentheses."
     ),
     out = output_tex_path
-)
+) |> capture.output()
 
 
 rm(list = ls()); invisible(gc())

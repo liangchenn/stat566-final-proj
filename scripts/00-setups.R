@@ -24,6 +24,7 @@ cat(sprintf("...Running %s ...", .FILE_NAME))
     # estimation, analysis
     "fixest",
     "sensemakr",
+    "stargazer",
     
     # causal
     "dagitty",
@@ -48,7 +49,7 @@ for (.pkg in .required_pkgs) {
     )
 }
 
-# invisible(lapply(required_packages, library, character.only = TRUE))
+invisible(lapply(.required_pkgs, library, character.only = TRUE))
 
 
 # Folder Structure ----------------------------------------------------------------------------
@@ -69,4 +70,4 @@ for (.path in .paths) {
 }
 
 
-cat("...done")
+cat("...done\n")
