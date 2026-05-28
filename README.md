@@ -30,6 +30,7 @@
 
 ## RHC data
 
+- CHECK the `scripts/02-defined-variables.R` for the outcomes, treatment, and different adjustment sets
 
 
 ## Progress
@@ -42,6 +43,14 @@
 
 - May 19, 2026
     - Estimator implementation
-        - ATT (Andy)
-        - AIPW (Jian)
-        - CATE, matching (LC)
+        - ~~ATT (Andy)~~
+        - ~~AIPW (Jian)~~
+        - ~~CATE, matching (LC)~~
+
+- May 28, 2026
+    - Robustness Check
+        - ~~trimming area~~
+        - differen adj. sets
+    - Sensitivity analysis
+        - E-values
+    
