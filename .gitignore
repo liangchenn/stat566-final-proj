@@ -9,6 +9,7 @@
 # custom
 examples/
 temp/
+results/
 
 # data
 *.csv
