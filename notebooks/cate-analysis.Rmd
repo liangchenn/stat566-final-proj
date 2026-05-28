@@ -1,0 +1,112 @@
+---
+title: "CATE Analysis"
+author: "Liang-Cheng Chen"
+date: "`r Sys.Date()`"
+output:
+  html_notebook:
+    theme: united
+    hightlight: tango
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+library(data.table)
+library(readr)
+library(ggplot2)
+
+
+
+project_root <- if (dir.exists("estimators")) normalizePath(".") else normalizePath("..")
+knitr::opts_knit$set(root.dir = project_root)
+setwd(project_root)
+source(file.path(project_root, "estimators/ate/ipw.R"))
+source(file.path(project_root, "estimators/att/ipw.R"))
+```
+
+## Setup
+
+```{r load-data}
+rhc <- fread("data/processed/rhc-processed-data.csv")
+var_sets <- readr::read_rds("data/processed/rhc-var-sets.rds")
+
+outcome_var <- "death30d"
+treat_var <- var_sets$treatment
+covariates <- var_sets$adjustment_sets$basic
+
+rhc[, age_group := fifelse(age >= median(age, na.rm = TRUE), "Older", "Younger")] |> invisible()
+rhc[, aps1_group := fifelse(aps1 >= median(aps1, na.rm = TRUE), "High APACHE", "Low APACHE")]|> invisible()
+rhc[, pafi1_group := fifelse(pafi1 >= median(pafi1, na.rm = TRUE), "High PaO2/FIO2", "Low PaO2/FIO2")]|> invisible()
+rhc[, dnr_group := fifelse(dnr1_Yes == 1, "DNR", "No DNR")]|> invisible()
+rhc[, chfhx_group := fifelse(chfhx == 1, "CHF history", "No CHF history")]|> invisible()
+
+subgroup_specs <- list(
+    age = list(group_var = "age_group", remove_covariate = "age"),
+    aps1 = list(group_var = "aps1_group", remove_covariate = "aps1"),
+    pafi1 = list(group_var = "pafi1_group", remove_covariate = "pafi1"),
+    dnr = list(group_var = "dnr_group", remove_covariate = "dnr1_Yes"),
+    chfhx = list(group_var = "chfhx_group", remove_covariate = "chfhx")
+)
+```
+
+## Subgroup estimation
+
+```{r subgroup-estimation}
+estimate_subgroup <- function(data, subgroup_name, subgroup_var, remove_covariate, level) {
+    subgroup_data <- data[get(subgroup_var) == level]
+    subgroup_covariates <- setdiff(covariates, remove_covariate)
+
+    if (length(unique(subgroup_data[[treat_var]])) < 2) {
+        return(data.table())
+    }
+
+    data.table(
+        subgroup = subgroup_name,
+        level = level,
+        estimand = c("ATE", "ATT"),
+        estimator = "Hajek IPW",
+        estimate = c(
+            estimate_ate_hajek_ipw(subgroup_data, outcome_var, treat_var, subgroup_covariates),
+            estimate_att_hajek_ipw(subgroup_data, outcome_var, treat_var, subgroup_covariates)
+        ),
+        n = nrow(subgroup_data),
+        n_treated = sum(subgroup_data[[treat_var]] == 1),
+        n_control = sum(subgroup_data[[treat_var]] == 0)
+    )
+}
+
+results <- rbindlist(lapply(names(subgroup_specs), function(subgroup_name) {
+    subgroup_var <- subgroup_specs[[subgroup_name]]$group_var
+    remove_covariate <- subgroup_specs[[subgroup_name]]$remove_covariate
+    rbindlist(lapply(unique(rhc[[subgroup_var]]), function(level) {
+        estimate_subgroup(rhc, subgroup_name, subgroup_var, remove_covariate, level)
+    }))
+}), fill = TRUE)
+
+results[]
+```
+
+```{r cate-plot, fig.width=7, fig.height=5}
+results[, subgroup_label := paste(subgroup, level, sep = ": ")] |> invisible()
+results[, subgroup_label := factor(subgroup_label, levels = rev(unique(subgroup_label)))] |> invisible()
+
+cate_plot <- ggplot(results, aes(x = subgroup_label, y = estimate, color = estimand)) +
+    geom_point(size = 2.4) +
+    geom_hline(yintercept = 0, color = "grey45", linetype = "dashed") +
+    coord_flip() +
+    labs(
+        x = NULL,
+        y = "Estimated risk difference",
+        color = "Estimand",
+        title = "Exploratory subgroup treatment-effect estimates"
+    ) +
+    theme_minimal()
+
+cate_plot
+```
+
+## Findings
+
+- These subgroup estimates are exploratory and should be interpreted as heterogeneity checks rather than definitive effect-modification tests.
+- Each subgroup removes the stratifying covariate from the adjustment set to avoid adjusting for the exact variable used to define the subgroup.
+- The `n`, `n_treated`, and `n_control` columns help identify subgroup estimates that may be unstable because of small sample sizes.

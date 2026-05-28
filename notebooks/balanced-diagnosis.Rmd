@@ -1,0 +1,145 @@
+---
+title: "Balance Diagnosis"
+date: "`r Sys.Date()`"
+output:
+  html_notebook:
+    theme: united
+    hightlight: tango
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+project_root <- if (dir.exists("estimators")) normalizePath(".") else normalizePath("..")
+knitr::opts_knit$set(root.dir = project_root)
+knitr::opts_chunk$set(
+    echo = TRUE,
+    message = FALSE,
+    warning = FALSE
+)
+library(data.table)
+library(readr)
+library(ggplot2)
+
+old_wd <- getwd()
+setwd(project_root)
+source(file.path(project_root, "estimators/utils.R"))
+setwd(old_wd)
+```
+
+## Setup
+
+```{r load-data}
+rhc <- fread("data/processed/rhc-processed-data.csv")
+var_sets <- readr::read_rds("data/processed/rhc-var-sets.rds")
+
+treat_var <- var_sets$treatment
+covariates <- var_sets$adjustment_sets$basic
+
+ps <- fit_propensity_score(
+    data = rhc,
+    treat_var = treat_var,
+    covariates = covariates
+)
+
+A <- rhc[[treat_var]]
+rhc[, ps := ps] |> invisible()
+rhc[, ate_weight := A / ps + (1 - A) / (1 - ps)] |> invisible()
+rhc[, att_weight := A + (1 - A) * ps / (1 - ps)] |> invisible()
+```
+
+## Balance helpers
+
+```{r balance-helpers}
+weighted_mean <- function(x, w) {
+    sum(w * x, na.rm = TRUE) / sum(w[!is.na(x)])
+}
+
+weighted_var <- function(x, w) {
+    m <- weighted_mean(x, w)
+    sum(w * (x - m)^2, na.rm = TRUE) / sum(w[!is.na(x)])
+}
+
+weighted_smd <- function(data, var, treat_var, weight_var = NULL) {
+    A <- data[[treat_var]]
+    x <- data[[var]]
+
+    if (is.null(weight_var)) {
+        m1 <- mean(x[A == 1], na.rm = TRUE)
+        m0 <- mean(x[A == 0], na.rm = TRUE)
+        v1 <- stats::var(x[A == 1], na.rm = TRUE)
+        v0 <- stats::var(x[A == 0], na.rm = TRUE)
+    } else {
+        w <- data[[weight_var]]
+        m1 <- weighted_mean(x[A == 1], w[A == 1])
+        m0 <- weighted_mean(x[A == 0], w[A == 0])
+        v1 <- weighted_var(x[A == 1], w[A == 1])
+        v0 <- weighted_var(x[A == 0], w[A == 0])
+    }
+
+    pooled_sd <- sqrt((v1 + v0) / 2)
+    if (is.na(pooled_sd) || pooled_sd == 0) return(0)
+    abs((m1 - m0) / pooled_sd)
+}
+```
+
+## Standardized mean differences
+
+```{r balance-table}
+balance <- rbindlist(lapply(covariates, function(var) {
+    data.table(
+        covariate = var,
+        raw = weighted_smd(rhc, var, treat_var),
+        ate_ipw = weighted_smd(rhc, var, treat_var, "ate_weight"),
+        att_ipw = weighted_smd(rhc, var, treat_var, "att_weight")
+    )
+}))
+
+balance[order(-raw)]
+```
+
+```{r love-plot, fig.width=7, fig.height=5}
+balance_long <- melt(
+    balance,
+    id.vars = "covariate",
+    variable.name = "sample",
+    value.name = "abs_smd"
+)
+balance_long[, covariate := factor(covariate, levels = balance[order(raw), covariate])]
+
+love_plot <- ggplot(balance_long, aes(x = covariate, y = abs_smd, color = sample)) +
+    geom_point(size = 2.2) +
+    geom_hline(yintercept = 0.1, color = "grey45", linetype = "dashed") +
+    coord_flip() +
+    labs(
+        x = NULL,
+        y = "Absolute SMD",
+        color = "Sample",
+        title = "Covariate balance before and after IPW"
+    ) +
+    theme_minimal()
+
+love_plot
+```
+
+## Propensity-score overlap
+
+```{r propensity-score-overlap, fig.width=7, fig.height=4.5}
+overlap_plot <- ggplot(rhc, aes(x = ps, fill = factor(get(treat_var)))) +
+    geom_density(alpha = 0.45) +
+    labs(
+        x = "Estimated propensity score",
+        y = "Density",
+        fill = "RHC",
+        title = "Propensity score overlap by treatment group"
+    ) +
+    theme_minimal()
+
+overlap_plot
+```
+
+## Findings
+
+- Raw balance is summarized by absolute standardized mean differences for each covariate in the basic adjustment set.
+- ATE and ATT weighting generally target different pseudo-populations, so their balance diagnostics do not need to be identical.
+- The propensity-score density plot checks whether treated and control patients have enough overlap for weighting to be credible.

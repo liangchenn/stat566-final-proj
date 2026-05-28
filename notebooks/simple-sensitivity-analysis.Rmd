@@ -1,0 +1,334 @@
+---
+title: "Simple Sensitivity Analysis"
+author: "Liang-Cheng Chen"
+date: "`r Sys.Date()`"
+output:
+  html_notebook:
+    theme: united
+    hightlight: tango
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+project_root <- if (dir.exists("estimators")) normalizePath(".") else normalizePath("..")
+knitr::opts_knit$set(root.dir = project_root)
+knitr::opts_chunk$set(
+    echo = TRUE,
+    message = FALSE,
+    warning = FALSE
+)
+library(data.table)
+library(readr)
+library(ggplot2)
+
+old_wd <- getwd()
+setwd(project_root)
+source(file.path(project_root, "estimators/ate/ipw.R"))
+source(file.path(project_root, "estimators/ate/matching.R"))
+source(file.path(project_root, "estimators/att/ipw.R"))
+source(file.path(project_root, "estimators/att/matching.R"))
+source(file.path(project_root, "estimators/utils.R"))
+setwd(old_wd)
+```
+
+## Setup
+
+```{r load-data}
+rhc <- fread("data/processed/rhc-processed-data.csv")
+var_sets <- readr::read_rds("data/processed/rhc-var-sets.rds")
+
+outcome_var <- "death30d"
+treat_var <- var_sets$treatment
+covariates <- var_sets$adjustment_sets$basic
+```
+
+# Robustness Checks
+
+## Trimming sensitivity
+
+```{r trimming-sensitivity}
+trim_grid <- list(
+    c(0.001, 0.999),
+    c(0.010, 0.990),
+    c(0.020, 0.980),
+    c(0.050, 0.950),
+    c(0.100, 0.900)
+)
+
+effective_sample_size <- function(w) {
+    sum(w)^2 / sum(w^2)
+}
+
+trim_results <- rbindlist(lapply(trim_grid, function(trim) {
+    ps <- fit_propensity_score(
+        data = rhc,
+        treat_var = treat_var,
+        covariates = covariates,
+        trim = trim
+    )
+    A <- rhc[[treat_var]]
+    ate_weight <- A / ps + (1 - A) / (1 - ps)
+    att_weight <- A + (1 - A) * ps / (1 - ps)
+
+    rbind(
+        data.table(
+            estimand = "ATE",
+            estimator = "Hajek IPW",
+            trim_lower = trim[1],
+            trim_upper = trim[2],
+            estimate = estimate_ate_hajek_ipw(
+                rhc, outcome_var, treat_var, covariates, trim = trim
+            ),
+            ess = effective_sample_size(ate_weight)
+        ),
+        data.table(
+            estimand = "ATT",
+            estimator = "Hajek IPW",
+            trim_lower = trim[1],
+            trim_upper = trim[2],
+            estimate = estimate_att_hajek_ipw(
+                rhc, outcome_var, treat_var, covariates, trim = trim
+            ),
+            ess = effective_sample_size(att_weight)
+        )
+    )
+}))
+
+trim_results[, trim := sprintf("[%.3f, %.3f]", trim_lower, trim_upper)] |> invisible()
+trim_results[]
+```
+
+```{r trimming-sensitivity-plot, fig.width=7, fig.height=4.5}
+trim_plot <- ggplot(trim_results, aes(x = trim, y = estimate, color = estimand, group = estimand)) +
+    geom_point(size = 2.4) +
+    geom_line() +
+    geom_hline(yintercept = 0, color = "grey45", linetype = "dashed") +
+    labs(
+        x = "Propensity-score trim",
+        y = "Estimated risk difference",
+        color = "Estimand",
+        title = "IPW sensitivity to propensity-score trimming"
+    ) +
+    theme_minimal()
+
+trim_plot
+```
+
+## Adjustment-set sensitivity
+
+```{r adjustment-set-sensitivity}
+adjustment_sets <- var_sets$adjustment_sets[c("minimal", "basic", "detailed")]
+
+set_results <- rbindlist(lapply(names(adjustment_sets), function(set_name) {
+    set_covariates <- adjustment_sets[[set_name]]
+
+    data.table(
+        adjustment_set = set_name,
+        estimand = c("ATE", "ATE", "ATT", "ATT"),
+        estimator = c("Hajek IPW", "PS matching", "Hajek IPW", "PS matching"),
+        estimate = c(
+            estimate_ate_hajek_ipw(rhc, outcome_var, treat_var, set_covariates),
+            estimate_ate_ps_matching(rhc, outcome_var, treat_var, set_covariates),
+            estimate_att_hajek_ipw(rhc, outcome_var, treat_var, set_covariates),
+            estimate_att_ps_matching(rhc, outcome_var, treat_var, set_covariates)
+        ),
+        n_covariates = length(set_covariates)
+    )
+}))
+
+set_results[, adjustment_set := factor(adjustment_set, 
+                                       levels = c("minimal", "basic", "detailed"), 
+                                       ordered = TRUE)] |> invisible()
+
+set_results[]
+```
+
+```{r adjustment-set-sensitivity-plot, fig.width=7, fig.height=4.5}
+set_plot <- ggplot(
+    set_results,
+    aes(x = adjustment_set, y = estimate, color = estimator, group = estimator)
+) +
+    geom_point(size = 2.4) +
+    geom_line() +
+    geom_hline(yintercept = 0, color = "grey45", linetype = "dashed") +
+    facet_wrap(~ estimand) +
+    labs(
+        x = "Adjustment set",
+        y = "Estimated risk difference",
+        color = "Estimator",
+        title = "Sensitivity to adjustment-set choice"
+    ) +
+    theme_minimal()
+
+set_plot
+```
+
+# Sensitivity Analysis (WiP)
+
+## E-values and partial R-squared
+
+```{r evalues}
+make_evalue <- function(rr) {
+    rr_bound <- ifelse(rr < 1, 1 / rr, rr)
+    ifelse(rr_bound == 1, 1, rr_bound + sqrt(rr_bound * (rr_bound - 1)))
+}
+
+estimate_regression_rr <- function(data, outcome_var, treat_var, covariates) {
+    fit <- glm(
+        make_interacted_outcome_formula(outcome_var, treat_var, covariates),
+        data = data,
+        family = binomial("logit")
+    )
+
+    data1 <- copy(data)
+    data0 <- copy(data)
+    data1[, (treat_var) := 1]
+    data0[, (treat_var) := 0]
+
+    p1 <- mean(predict(fit, newdata = data1, type = "response"))
+    p0 <- mean(predict(fit, newdata = data0, type = "response"))
+    p1 / p0
+}
+
+estimate_ate_ipw_rr <- function(data, outcome_var, treat_var, covariates, trim = c(0.02, 0.98)) {
+    A <- data[[treat_var]]
+    Y <- data[[outcome_var]]
+    ps <- fit_propensity_score(data, treat_var, covariates, trim = trim)
+
+    w1 <- A / ps
+    w0 <- (1 - A) / (1 - ps)
+    p1 <- sum(w1 * Y) / sum(w1)
+    p0 <- sum(w0 * Y) / sum(w0)
+    p1 / p0
+}
+
+estimate_att_ipw_rr <- function(data, outcome_var, treat_var, covariates, trim = c(0.02, 0.98)) {
+    A <- data[[treat_var]]
+    Y <- data[[outcome_var]]
+    ps <- fit_propensity_score(data, treat_var, covariates, trim = trim)
+
+    w0 <- (1 - A) * ps / (1 - ps)
+    p1 <- mean(Y[A == 1])
+    p0 <- sum(w0 * Y) / sum(w0)
+    p1 / p0
+}
+
+A <- rhc[[treat_var]]
+Y <- rhc[[outcome_var]]
+
+evalue_results <- data.table(
+    estimand = c("Raw", "ATE", "ATE", "ATT"),
+    estimator = c("Naive risk ratio", "Regression adjustment", "Hajek IPW", "Hajek IPW"),
+    risk_ratio = c(
+        mean(Y[A == 1]) / mean(Y[A == 0]),
+        estimate_regression_rr(rhc, outcome_var, treat_var, covariates),
+        estimate_ate_ipw_rr(rhc, outcome_var, treat_var, covariates),
+        estimate_att_ipw_rr(rhc, outcome_var, treat_var, covariates)
+    )
+)
+evalue_results[, e_value := make_evalue(risk_ratio)] |> invisible()
+
+evalue_results[]
+```
+
+```{r evalue-plot, fig.width=7, fig.height=4.5}
+evalue_results[, label := paste(estimand, estimator, sep = ": ")] |> invisible()
+evalue_results[, label := factor(label, levels = rev(label))]|> invisible()
+
+evalue_plot <- ggplot(evalue_results, aes(x = label, y = e_value, color = estimand)) +
+    geom_point(size = 2.6) +
+    geom_hline(yintercept = 1, color = "grey45", linetype = "dashed") +
+    coord_flip() +
+    labs(
+        x = NULL,
+        y = "E-value",
+        color = "Estimand",
+        title = "E-values for risk-ratio estimates"
+    ) +
+    theme_minimal()
+
+evalue_plot
+```
+
+```{r partial-r2}
+make_lm_formula <- function(lhs, rhs_vars) {
+    if (length(rhs_vars) == 0) {
+        as.formula(paste(lhs, "~ 1"))
+    } else {
+        reformulate(rhs_vars, response = lhs)
+    }
+}
+
+partial_r2_from_models <- function(full_model, reduced_model) {
+    full_r2 <- summary(full_model)$r.squared
+    reduced_r2 <- summary(reduced_model)$r.squared
+    max(0, (full_r2 - reduced_r2) / (1 - reduced_r2))
+}
+
+treatment_outcome_partial_r2 <- partial_r2_from_models(
+    lm(make_lm_formula(outcome_var, c(treat_var, covariates)), data = rhc),
+    lm(make_lm_formula(outcome_var, covariates), data = rhc)
+)
+
+benchmark_r2 <- rbindlist(lapply(covariates, function(var) {
+    other_covariates <- setdiff(covariates, var)
+
+    treatment_full <- lm(make_lm_formula(treat_var, covariates), data = rhc)
+    treatment_reduced <- lm(make_lm_formula(treat_var, other_covariates), data = rhc)
+
+    outcome_full <- lm(make_lm_formula(outcome_var, c(treat_var, covariates)), data = rhc)
+    outcome_reduced <- lm(make_lm_formula(outcome_var, c(treat_var, other_covariates)), data = rhc)
+
+    data.table(
+        benchmark_covariate = var,
+        partial_r2_with_treatment = partial_r2_from_models(treatment_full, treatment_reduced),
+        partial_r2_with_outcome = partial_r2_from_models(outcome_full, outcome_reduced)
+    )
+}))
+
+benchmark_r2[, treatment_outcome_partial_r2 := treatment_outcome_partial_r2] |> invisible()
+benchmark_r2[order(-partial_r2_with_treatment, -partial_r2_with_outcome)]
+```
+
+```{r partial-r2-plot, fig.width=7, fig.height=5}
+benchmark_r2_long <- melt(
+    benchmark_r2,
+    id.vars = "benchmark_covariate",
+    measure.vars = c("partial_r2_with_treatment", "partial_r2_with_outcome"),
+    variable.name = "relationship",
+    value.name = "partial_r2"
+)
+benchmark_r2_long[, benchmark_covariate := factor(
+    benchmark_covariate,
+    levels = benchmark_r2[order(partial_r2_with_treatment), benchmark_covariate]
+)] |> invisible()
+
+partial_r2_plot <- ggplot(
+    benchmark_r2_long,
+    aes(x = benchmark_covariate, y = partial_r2, color = relationship)
+) +
+    geom_point(size = 2.2) +
+    geom_hline(
+        yintercept = treatment_outcome_partial_r2,
+        color = "grey45",
+        linetype = "dashed"
+    ) +
+    coord_flip() +
+    labs(
+        x = NULL,
+        y = "Partial R-squared",
+        color = "Relationship",
+        title = "Observed-covariate partial R-squared benchmarks"
+    ) +
+    theme_minimal()
+
+partial_r2_plot
+```
+
+## Findings
+
+- PS trimming does not affect the results much, the ATE and ATT estimation are stable.
+- Adjustment sets seems to be best for basic adjustment set.
+- E-values summarize how strong an unmeasured confounder would need to be, on the risk-ratio scale, to explain away each estimate.
+- Partial R-squared values benchmark unmeasured confounding against observed covariates; larger values mean a covariate explains more residual variation in treatment or outcome.
