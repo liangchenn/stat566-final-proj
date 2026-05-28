@@ -28,5 +28,11 @@ cat("finished \n\n")
 
 # Project Analysis ----------------------------------------------------------------------------
 
-cat("Preparing project analysis: \n\n")
-
+cat("Preparing project analysis: \n")
+source("analysis/00-dag-design.R")
+source("analysis/01-balance-diagnostics.R")
+source("analysis/02-odds-ratio-estimator-comparison.R")
+source("analysis/03-trimming-sensitivity.R")
+source("analysis/04-adjustment-set-sensitivity.R")
+source("analysis/05-cate-subgroup-analysis.R")
+cat("finished \n\n")
