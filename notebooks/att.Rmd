@@ -19,9 +19,9 @@ library(ggplot2)
 
 
 ```{r}
-rhc <- ATbounds::RHC
+rhc <- read.csv("../data/processed/rhc-processed-data.csv")
 
-# rhc$survival <- factor(rhc2$survival)
+# rhc$death30d <- factor(rhc2$death30d)
 # rhc$RHC <- factor(rhc$RHC)
 ```
 
@@ -37,11 +37,11 @@ rhc_dag <- dagitty("dag {
   age -> chfhx;
   age -> dnr1_Yes;
   age -> meanbp1;
-  chfhx -> survival;
+  chfhx -> death30d;
   chfhx -> meanbp1;
   chfhx -> pafi1;
   meanbp1 -> aps1;
-  meanbp1 -> survival;
+  meanbp1 -> death30d;
   meanbp1 -> pafi1;
   meanbp1 -> scoma1;
   meanbp1 -> RHC;
@@ -50,23 +50,23 @@ rhc_dag <- dagitty("dag {
   pafi1 -> RHC;
   scoma1 -> aps1;
   scoma1 -> dnr1_Yes;
-  aps1 -> survival;
+  aps1 -> death30d;
   aps1 -> RHC;
-  dnr1_Yes -> survival;
-  RHC -> survival
+  dnr1_Yes -> death30d;
+  RHC -> death30d
 }")
 
 coordinates(rhc_dag) <- list(
   x = c(cat1 = 0, age = 0, chfhx = 0, 
         pafi1 = 1, meanbp1 = 1, scoma1 = 1, 
         aps1 = 2, dnr1_Yes = 2, 
-        RHC = 3, survival = 3),
+        RHC = 3, death30d = 3),
   
   # Staggered Y-coordinates to dodge straight lines
   y = c(cat1 = 0, age = 2, chfhx = 4, 
         pafi1 = -1, meanbp1 = 2, scoma1 = 5, 
         aps1 = 0.5, dnr1_Yes = 3.5, 
-        RHC = 0, survival = 2.5)
+        RHC = 0, death30d = 2.5)
 )
 
 # 1. Base dagitty plot
@@ -81,7 +81,7 @@ ggdag(rhc_dag, text = FALSE, use_labels = "name") +
 
 RHC: Right Heart Catheterization (RHC) status during the first 24 hours (Treatment, $A$).
 
-survival: All-cause mortality up to 180 days (Outcome, $Y$).
+death30d: All-cause mortality up to 180 days (Outcome, $Y$).
 
 age: Patient age in years.
 
@@ -101,15 +101,15 @@ dnr1_yes: Do Not Resuscitate (DNR) status established on day 1.
 
 
 ```{r}
-adjustmentSets(rhc_dag, exposure = "RHC", outcome = "survival")
+adjustmentSets(rhc_dag, exposure = "RHC", outcome = "death30d")
 ```
 
 
 ```{r}
 library(ggplot2)
 
-# Ensure survival is treated as a categorical factor, not a continuous integer
-rhc$survival <- factor(rhc$survival, levels = c(0, 1))
+# Ensure death30d is treated as a categorical factor, not a continuous integer
+rhc$death30d <- factor(rhc$death30d, levels = c(0, 1))
 
 ggplot(rhc, aes(x = scoma1, fill = factor(RHC))) +
   # alpha = 0.5 makes the distributions semi-transparent so you can see the overlap
@@ -124,10 +124,10 @@ ggplot(rhc, aes(x = scoma1, fill = factor(RHC))) +
   # Clean, publication-ready theme
   theme_minimal() +
   labs(
-    title = "Density Distribution by Survival Status",
+    title = "Density Distribution by death30d Status",
     x = "Glasgow Coma Score on day 1",
     y = "Density",
-    fill = "Survival Status"
+    fill = "death30d Status"
   ) +
   theme(legend.position = "top")
 ```
@@ -153,12 +153,12 @@ rhc <- rhc %>%
 
 ```{r}
 cat_vars <- c("aps1", "chfhx", "dnr1_Yes", "meanbp1")
-survival_form <- as.formula(paste("survival ~ ", 
+death30d_form <- as.formula(paste("death30d ~ ", 
                                   paste(cat_vars, collapse = "+")))
 
-fit_mu0 <- glm(survival_form, data = subset(rhc, RHC == 0), family=binomial)
+fit_mu0 <- glm(death30d_form, data = subset(rhc, RHC == 0), family=binomial)
 mu0_hat <- predict(fit_mu0, newdata = rhc, type="response")
-tau_ATT_reg <- mean(rhc$survival[rhc$RHC==1] - mu0_hat[rhc$RHC == 1])
+tau_ATT_reg <- mean(rhc$death30d[rhc$RHC==1] - mu0_hat[rhc$RHC == 1])
 
 cat("ATT via outcome regression: ", round(tau_ATT_reg, 3), "\n")
 ```
@@ -168,7 +168,7 @@ cat("ATT via outcome regression: ", round(tau_ATT_reg, 3), "\n")
 e_hat <- predict(glm(RHC ~ chfhx + aps1 + meanbp1 + dnr1_Yes, data = rhc, family = binomial), type = "response")
 
 w_treat <- rhc$RHC + (1 - rhc$RHC)  * (e_hat / (1 - e_hat))
-tau_ATT_IPW <- mean(rhc$survival[rhc$RHC == 1]) - (sum((1 - rhc$RHC) * w_treat * rhc$survival) / sum((1-rhc$RHC) * w_treat))
+tau_ATT_IPW <- mean(rhc$death30d[rhc$RHC == 1]) - (sum((1 - rhc$RHC) * w_treat * rhc$death30d) / sum((1-rhc$RHC) * w_treat))
 
 cat("ATT via IPW: ", round(tau_ATT_IPW, 3), "\n")
 ```
@@ -187,7 +187,7 @@ bal.plot(RHC ~ chfhx + aps1 + meanbp1 + pafi1 + scoma1, data = rhc, weights = w_
 if (!requireNamespace("Matching", quietly=TRUE)) install.packages("Matching")
 library(Matching)
 
-m_att <- Match(Y = rhc$survival, Tr = rhc$RHC, X = e_hat,
+m_att <- Match(Y = rhc$death30d, Tr = rhc$RHC, X = e_hat,
 estimand = "ATT", M = 1, replace = TRUE)
 tau_ATT_match <- m_att$est
 
@@ -198,8 +198,8 @@ cat("ATT via 1:1 PS matching: ", round(tau_ATT_match, 3), "\n")
 
 ```{r}
 tau_ATT_AIPW <- mean(
-  rhc$RHC * (rhc$survival - mu0_hat) - (1 - rhc$RHC) * 
-    (e_hat / (1 - e_hat)) * (rhc$survival - mu0_hat)) / mean(rhc$RHC)
+  rhc$RHC * (rhc$death30d - mu0_hat) - (1 - rhc$RHC) * 
+    (e_hat / (1 - e_hat)) * (rhc$death30d - mu0_hat)) / mean(rhc$RHC)
 
 cat("ATT via AIPW (doubly robust): ", round(tau_ATT_AIPW, 3), "\n\n")
 ```
@@ -209,29 +209,29 @@ cat("ATT via AIPW (doubly robust): ", round(tau_ATT_AIPW, 3), "\n\n")
 one_rep <- function(covs_formula, df) {
   # standardization regression
   cat_vars <- c("aps1", "chfhx", "dnr1_Yes", "meanbp1")
-  survival_form <- as.formula(paste("survival ~ ", covs_formula))
+  death30d_form <- as.formula(paste("death30d ~ ", covs_formula))
 
-  fit_mu0 <- glm(survival_form, data = subset(df, RHC == 0), family=binomial)
+  fit_mu0 <- glm(death30d_form, data = subset(df, RHC == 0), family=binomial)
   mu0_hat <- predict(fit_mu0, newdata = df, type="response")
-  tau_ATT_reg <- mean(df$survival[df$RHC==1] - mu0_hat[df$RHC == 1])
+  tau_ATT_reg <- mean(df$death30d[df$RHC==1] - mu0_hat[df$RHC == 1])
   
   # Hajek IPW
   e_hat <- predict(glm(RHC ~ chfhx + aps1 + meanbp1 + dnr1_Yes, data = df, family =
                          binomial), type = "response")
 
   w_treat <- df$RHC + (1 - df$RHC)  * (e_hat / (1 - e_hat))
-  tau_ATT_IPW <- mean(df$survival[df$RHC == 1]) - (sum((1 - df$RHC) * w_treat *
-                                                           df$survival) / sum((1-df$RHC)
+  tau_ATT_IPW <- mean(df$death30d[df$RHC == 1]) - (sum((1 - df$RHC) * w_treat *
+                                                           df$death30d) / sum((1-df$RHC)
                                                                                * w_treat))
   # Matching
-  m_att <- Match(Y = df$survival, Tr = df$RHC, X = e_hat, 
+  m_att <- Match(Y = df$death30d, Tr = df$RHC, X = e_hat, 
                  estimand = "ATT", M = 1, replace = TRUE)
   tau_ATT_match <- m_att$est
 
   
   # AIPW (doubly robust)
-  tau_ATT_AIPW <- mean(df$RHC * (df$survival - mu0_hat) - (1 - df$RHC) * 
-                         (e_hat / (1 - e_hat)) * (df$survival - mu0_hat)) / mean(df$RHC)
+  tau_ATT_AIPW <- mean(df$RHC * (df$death30d - mu0_hat) - (1 - df$RHC) * 
+                         (e_hat / (1 - e_hat)) * (df$death30d - mu0_hat)) / mean(df$RHC)
 
   return(c(reg_via_std = round(tau_ATT_reg, 3),
     Hajek_IPW = round(tau_ATT_IPW, 3),
