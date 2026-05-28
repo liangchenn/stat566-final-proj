@@ -28,7 +28,11 @@ cat(sprintf("...Running %s ...", .FILE_NAME))
     # causal
     "dagitty",
     "MatchIt",
-    "Matching"
+    "Matching",
+    
+    # DAG
+    "dagitty",
+    "ggdag"
 )
 
 

@@ -10,6 +10,10 @@
 examples/
 temp/
 results/
+data/
 
 # data
 *.csv
+
+# output
+*.nb.html
