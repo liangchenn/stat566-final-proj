@@ -30,6 +30,7 @@ cat("finished \n\n")
 
 cat("Preparing project analysis: \n")
 source("analysis/00-dag-design.R")
+source("analysis/00-estimator-comparison.R")
 source("analysis/01-balance-diagnostics.R")
 source("analysis/02-odds-ratio-estimator-comparison.R")
 source("analysis/03-trimming-sensitivity.R")
