@@ -2,6 +2,14 @@
 
 ## Project Structure
 
+### Usage
+
+- Execute `main.R` will: 
+    - create analysis dataset from raw data on the Internet
+    - generate all figures and tables we put in the report
+    
+- Or run `make run` in the terminal
+
 ### Overview:
 ```
 ├── analysis/
