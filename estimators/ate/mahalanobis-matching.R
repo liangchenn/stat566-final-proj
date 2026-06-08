@@ -23,7 +23,7 @@ estimate_ate_mahalanobis_matching <- function(
     estimand = "ATE",
     M = 1,
     replace = TRUE,
-    return_deatails = FALSE
+    return_details = FALSE
 ) {
     # 1. use all covariates given to compute distance
     X <- stats::model.matrix(

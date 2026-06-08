@@ -24,7 +24,7 @@ estimate_ate_ps_matching <- function(
     trim = c(0.02, 0.98),
     M = 1,
     replace = TRUE,
-    return_deatails = FALSE
+    return_details = FALSE
 ) {
     # 1. calculate propensity score
     ps <- fit_propensity_score(
