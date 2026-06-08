@@ -1,6 +1,6 @@
 #' README:
 #' -------
-#' - author: Liang-Cheng Chen
+#' - author: Andy Shin, Liang-Cheng Chen
 #' - date: 2026-05-28
 #'
 #' Desc:
@@ -89,7 +89,9 @@ weighted_smd <- function(data, var, treat_var, weight_var = NULL) {
     }
 
     pooled_sd <- sqrt((v1 + v0) / 2)
-    if (is.na(pooled_sd) || pooled_sd == 0) return(0)
+    if (is.na(pooled_sd) || pooled_sd == 0) {
+        return(0)
+    }
     abs((m1 - m0) / pooled_sd)
 }
 
@@ -113,9 +115,14 @@ balance_long <- melt(
     variable.name = "sample",
     value.name = "abs_smd"
 )
-balance_long[, covariate := factor(covariate, levels = balance[order(raw), covariate])]
+balance_long[,
+    covariate := factor(covariate, levels = balance[order(raw), covariate])
+]
 
-love_plot <- ggplot(balance_long, aes(x = covariate, y = abs_smd, color = sample)) +
+love_plot <- ggplot(
+    balance_long,
+    aes(x = covariate, y = abs_smd, color = sample)
+) +
     geom_point(size = 2.2) +
     geom_hline(yintercept = 0.1, color = "grey45", linetype = "dashed") +
     coord_flip() +
@@ -153,5 +160,6 @@ ggsave(
     dpi = 300
 )
 
-rm(list = ls()); invisible(gc())
+rm(list = ls())
+invisible(gc())
 cat("...done\n")

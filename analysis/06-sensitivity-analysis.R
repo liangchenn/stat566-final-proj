@@ -1,6 +1,6 @@
 #' README:
 #' -------
-#' - author: Liang-Cheng Chen
+#' - author: Jian Kang, Liang-Cheng Chen
 #' - date: 2026-06-01
 #'
 #' Desc:
@@ -65,12 +65,14 @@ make_evalue <- function(rr) {
     ifelse(rr_star <= 1, 1, rr_star + sqrt(rr_star * (rr_star - 1)))
 }
 
-estimate_ipw_contrast <- function(data,
-                                  outcome_var,
-                                  treat_var,
-                                  covariates,
-                                  estimand = c("ATE", "ATT"),
-                                  trim = c(0.02, 0.98)) {
+estimate_ipw_contrast <- function(
+    data,
+    outcome_var,
+    treat_var,
+    covariates,
+    estimand = c("ATE", "ATT"),
+    trim = c(0.02, 0.98)
+) {
     estimand <- match.arg(estimand)
     A <- data[[treat_var]]
     Y <- data[[outcome_var]]
@@ -102,21 +104,45 @@ estimate_ipw_contrast <- function(data,
 }
 
 bootstrap_ipw <- function(data, estimand) {
-    point <- estimate_ipw_contrast(data, outcome_var, treat_var, covariates, estimand)
+    point <- estimate_ipw_contrast(
+        data,
+        outcome_var,
+        treat_var,
+        covariates,
+        estimand
+    )
 
     boot <- rbindlist(lapply(seq_len(n_bootstrap), function(i) {
         idx <- sample.int(nrow(data), nrow(data), replace = TRUE)
-        estimate_ipw_contrast(data[idx], outcome_var, treat_var, covariates, estimand)
+        estimate_ipw_contrast(
+            data[idx],
+            outcome_var,
+            treat_var,
+            covariates,
+            estimand
+        )
     }))
 
     alpha <- 0.05
     point[, `:=`(
         rd_se = stats::sd(boot$risk_difference, na.rm = TRUE),
-        rd_ci_lower = stats::quantile(boot$risk_difference, alpha / 2, na.rm = TRUE),
-        rd_ci_upper = stats::quantile(boot$risk_difference, 1 - alpha / 2, na.rm = TRUE),
+        rd_ci_lower = stats::quantile(
+            boot$risk_difference,
+            alpha / 2,
+            na.rm = TRUE
+        ),
+        rd_ci_upper = stats::quantile(
+            boot$risk_difference,
+            1 - alpha / 2,
+            na.rm = TRUE
+        ),
         rr_se = stats::sd(boot$risk_ratio, na.rm = TRUE),
         rr_ci_lower = stats::quantile(boot$risk_ratio, alpha / 2, na.rm = TRUE),
-        rr_ci_upper = stats::quantile(boot$risk_ratio, 1 - alpha / 2, na.rm = TRUE),
+        rr_ci_upper = stats::quantile(
+            boot$risk_ratio,
+            1 - alpha / 2,
+            na.rm = TRUE
+        ),
         n_bootstrap = n_bootstrap
     )]
 
@@ -131,11 +157,27 @@ primary <- rbind(
     bootstrap_ipw(rhc, "ATT")
 )
 primary[, estimator := "Hajek IPW"]
-setcolorder(primary, c(
-    "estimand", "estimator", "risk_rhc", "risk_no_rhc", "risk_difference",
-    "rd_se", "rd_ci_lower", "rd_ci_upper", "risk_ratio", "rr_se",
-    "rr_ci_lower", "rr_ci_upper", "odds_ratio", "ess", "n", "n_bootstrap"
-))
+setcolorder(
+    primary,
+    c(
+        "estimand",
+        "estimator",
+        "risk_rhc",
+        "risk_no_rhc",
+        "risk_difference",
+        "rd_se",
+        "rd_ci_lower",
+        "rd_ci_upper",
+        "risk_ratio",
+        "rr_se",
+        "rr_ci_lower",
+        "rr_ci_upper",
+        "odds_ratio",
+        "ess",
+        "n",
+        "n_bootstrap"
+    )
+)
 
 evalues <- copy(primary)
 evalues[, `:=`(
@@ -153,8 +195,14 @@ evalues[, `:=`(
     )
 )]
 evalues <- evalues[, .(
-    estimand, estimator, risk_ratio, rr_ci_lower, rr_ci_upper,
-    evalue_point, evalue_ci_limit, interpretation
+    estimand,
+    estimator,
+    risk_ratio,
+    rr_ci_lower,
+    rr_ci_upper,
+    evalue_point,
+    evalue_ci_limit,
+    interpretation
 )]
 
 fwrite(primary, primary_table_path)
@@ -170,13 +218,18 @@ evalue_plot_data <- melt(
     variable.name = "quantity",
     value.name = "evalue"
 )
-evalue_plot_data[, quantity := fifelse(
-    quantity == "evalue_point",
-    "Point estimate",
-    "CI limit"
-)]
+evalue_plot_data[,
+    quantity := fifelse(
+        quantity == "evalue_point",
+        "Point estimate",
+        "CI limit"
+    )
+]
 
-evalue_plot <- ggplot(evalue_plot_data, aes(x = estimand, y = evalue, fill = quantity)) +
+evalue_plot <- ggplot(
+    evalue_plot_data,
+    aes(x = estimand, y = evalue, fill = quantity)
+) +
     geom_col(position = position_dodge(width = 0.7), width = 0.6) +
     geom_hline(yintercept = 1, color = "grey45", linetype = "dashed") +
     labs(
@@ -195,5 +248,6 @@ ggsave(
     dpi = 300
 )
 
-rm(list = ls()); invisible(gc())
+rm(list = ls())
+invisible(gc())
 cat("...done\n")
