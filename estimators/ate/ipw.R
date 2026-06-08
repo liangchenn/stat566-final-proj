@@ -9,7 +9,6 @@
 #' The implementation follows examples/hw3-ans.Rmd and uses the shared
 #' propensity-score helper in estimators/utils.R.
 
-
 # Packages ------------------------------------------------------------------------------------
 library(data.table)
 source("estimators/utils.R")
@@ -17,17 +16,20 @@ source("estimators/utils.R")
 
 # Estimator -----------------------------------------------------------------------------------
 
-estimate_ate_hajek_ipw <- function(data,
-                                   outcome_var,
-                                   treat_var,
-                                   covariates,
-                                   estimand = "ATE",
-                                   covariate_set = NA_character_,
-                                   trim = c(0.02, 0.98)
+estimate_ate_hajek_ipw <- function(
+    data,
+    outcome_var,
+    treat_var,
+    covariates,
+    estimand = "ATE",
+    trim = c(0.02, 0.98),
+    return_details = FALSE
 ) {
-    
+    # extract variables
     A <- data[[treat_var]]
     Y <- data[[outcome_var]]
+
+    # propensity score
     ps <- fit_propensity_score(
         data = data,
         treat_var = treat_var,
@@ -42,5 +44,16 @@ estimate_ate_hajek_ipw <- function(data,
     mu0 <- sum(control_weight * Y) / sum(control_weight)
     tau_hat <- mu1 - mu0
 
-    return(tau_hat)
+    if (!return_details) {
+        return(tau_hat)
+    }
+
+    result <- list(
+        estimate = tau_hat,
+        ps = ps,
+        treated_weight = treated_weight,
+        control_weight = control_weight
+    )
+
+    return(result)
 }

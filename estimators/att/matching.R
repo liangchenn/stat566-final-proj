@@ -16,25 +16,18 @@ source("estimators/utils.R")
 
 # Estimator -----------------------------------------------------------------------------------
 
-estimate_att_ps_matching <- function(data,
-                                     outcome_var,
-                                     treat_var,
-                                     covariates,
-                                     estimand = "ATT",
-                                     covariate_set = NA_character_,
-                                     trim = c(0.02, 0.98),
-                                     M = 1,
-                                     replace = TRUE) {
-    # estimand <- match_estimand(estimand)
-    # if (estimand != "ATT") {
-    #     stop("estimate_att_ps_matching() only supports estimand = 'ATT'.")
-    # }
-    # validate_estimator_input(data, outcome_var, treat_var, covariates)
-    # 
-    # if (!requireNamespace("Matching", quietly = TRUE)) {
-    #     stop("Package `Matching` is required for propensity-score matching.")
-    # }
-
+estimate_att_ps_matching <- function(
+    data,
+    outcome_var,
+    treat_var,
+    covariates,
+    estimand = "ATT",
+    trim = c(0.02, 0.98),
+    M = 1,
+    replace = TRUE,
+    return_details = FALSE
+) {
+    # 1. calculate propensity score
     ps <- fit_propensity_score(
         data = data,
         treat_var = treat_var,
@@ -51,5 +44,15 @@ estimate_att_ps_matching <- function(data,
         replace = replace
     )
 
-    return(matching_fit$est[[1]])
+    # 3. output
+    if (!return_details) {
+        return(matching_fit$est[[1]])
+    }
+
+    result <- list(
+        estimate = matching_fit$est[[1]],
+        fit = matching_fit
+    )
+
+    return(result)
 }

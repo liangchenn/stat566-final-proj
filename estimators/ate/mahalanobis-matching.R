@@ -1,12 +1,12 @@
 #' README:
 #' -------
 #' - author: Liang-Cheng Chen
-#' - date: 2026-05-27
+#' - date: 2026-06-07
 #'
 #' Desc:
 #' -------
-#' This file defines the 1:1 nearest-neighbor propensity-score matching
-#' estimator for the ATE, following examples/hw3-ans.Rmd.
+#' This file defines the 1:1 nearest-neighbor Mahalanobis matching
+#' estimator for the ATE, following the structure of estimators/ate/matching.R.
 
 # Packages ------------------------------------------------------------------------------------
 library(data.table)
@@ -15,33 +15,34 @@ source("estimators/utils.R")
 
 # Estimator -----------------------------------------------------------------------------------
 
-estimate_ate_ps_matching <- function(
+estimate_ate_mahalanobis_matching <- function(
     data,
     outcome_var,
     treat_var,
     covariates,
     estimand = "ATE",
-    trim = c(0.02, 0.98),
     M = 1,
     replace = TRUE,
     return_deatails = FALSE
 ) {
-    # 1. calculate propensity score
-    ps <- fit_propensity_score(
-        data = data,
-        treat_var = treat_var,
-        covariates = covariates,
-        trim = trim
+    # 1. use all covariates given to compute distance
+    X <- stats::model.matrix(
+        as.formula(paste("~", make_rhs(covariates))),
+        data = data
     )
 
-    # 2. matching with Matching::Match func
+    # X[, .("(Intercept)") := NULL] # only for data.table
+    X <- X[, colnames(X) != "(Intercept)", drop = FALSE]
+
+    # 2. Matching with X
     matching_fit <- Matching::Match(
         Y = data[[outcome_var]],
         Tr = data[[treat_var]],
-        X = ps,
+        X = X,
         M = M,
         estimand = estimand,
-        replace = replace
+        replace = replace,
+        Weight = 2
     )
 
     # 3. output

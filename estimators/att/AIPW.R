@@ -1,16 +1,16 @@
 #' README:
 #' -------
 #' - author: Jian Kang, Liang-Cheng Chen
-#' - date: 2026-06-03
+#' - date: 2026-06-08
 #'
 #' Desc:
 #' -------
 #' This file defines the augmented inverse-probability-weighted (AIPW)
-#' estimator for the ATE.
+#' estimator for the ATT.
 #'
-#' estimate_ate_aipw() is the base estimator for one fit/evaluate pass.
-#' Bootstrapping can call it directly. Cross-fitting calls it fold by fold with
-#' held-out prediction data and combines the returned scores.
+#' estimate_att_aipw() is the base estimator for one fit/evaluate pass.
+#' Bootstrapping can call it directly. Cross-fitting can call it fold by fold
+#' with held-out prediction data and combine the returned scores.
 
 # Packages ------------------------------------------------------------------------------------
 library(data.table)
@@ -19,12 +19,12 @@ source("estimators/utils.R")
 
 # Base estimator ------------------------------------------------------------------------------
 
-estimate_ate_aipw <- function(
+estimate_att_aipw <- function(
     data,
     outcome_var,
     treat_var,
     covariates,
-    estimand = "ATE",
+    estimand = "ATT",
     prediction_data = NULL,
     trim = c(0.02, 0.98),
     return_details = FALSE
@@ -41,9 +41,15 @@ estimate_ate_aipw <- function(
         prediction_data <- prediction_data[, required_vars, drop = FALSE]
     }
 
+    control_train_data <- train_data[
+        train_data[[treat_var]] == 0,
+        ,
+        drop = FALSE
+    ]
+
     outcome_fit <- glm(
-        make_outcome_formula(outcome_var, treat_var, covariates),
-        data = train_data,
+        make_formula(outcome_var, covariates),
+        data = control_train_data,
         family = binomial("logit")
     )
     propensity_fit <- glm(
@@ -52,20 +58,9 @@ estimate_ate_aipw <- function(
         family = binomial("logit")
     )
 
-    # NOTE: original transform would fail, use base syntax
-    data_treated <- prediction_data
-    data_control <- prediction_data
-    data_treated[[treat_var]] <- 1
-    data_control[[treat_var]] <- 0
-
-    mu1_hat <- stats::predict(
-        outcome_fit,
-        newdata = data_treated,
-        type = "response"
-    )
     mu0_hat <- stats::predict(
         outcome_fit,
-        newdata = data_control,
+        newdata = prediction_data,
         type = "response"
     )
     ps_hat <- stats::predict(
@@ -78,10 +73,10 @@ estimate_ate_aipw <- function(
     Y <- prediction_data[[outcome_var]]
     ps_hat <- pmin(pmax(ps_hat, trim[1]), trim[2])
 
-    scores <- (mu1_hat - mu0_hat) +
-        A * (Y - mu1_hat) / ps_hat -
-        (1 - A) * (Y - mu0_hat) / (1 - ps_hat)
-    tau_hat <- mean(scores)
+    scores <- A *
+        (Y - mu0_hat) -
+        (1 - A) * ps_hat / (1 - ps_hat) * (Y - mu0_hat)
+    tau_hat <- mean(scores) / mean(A)
 
     if (!return_details) {
         return(tau_hat)
@@ -89,7 +84,7 @@ estimate_ate_aipw <- function(
 
     result <- list(
         estimate = tau_hat,
-        mu1_hat = mu1_hat,
+        scores = scores,
         mu0_hat = mu0_hat,
         ps_hat = ps_hat
     )
