@@ -162,7 +162,7 @@ desc_table <- rbind(
 fwrite(desc_table, output_csv_path)
 
 
-# Stargazer LaTeX output ----------------------------------------------------------------------
+# LaTeX output ----------------------------------------------------------------------
 
 # output tex table
 stargazer(
