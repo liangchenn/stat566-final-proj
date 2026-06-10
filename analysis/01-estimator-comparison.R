@@ -26,29 +26,43 @@ cat(sprintf("...Running %s ...", .FILE_NAME))
 library(data.table)
 library(readr)
 library(ggplot2)
+# table output
+library(stargazer)
+library(xtable)
+
+
+# Esimators -----------------------------------------------------------------------------------
+source("estimators/utils.R")
 
 source("estimators/ate/ipw.R")
 source("estimators/ate/matching.R")
 source("estimators/ate/AIPW.R")
+
 source("estimators/att/ipw.R")
 source("estimators/att/matching.R")
 source("estimators/att/AIPW.R")
-source("estimators/utils.R")
 
 
-# Main ----------------------------------------------------------------------------------------
+# Setups --------------------------------------------------------------------------------------
 
-dir.create("results/tables", recursive = TRUE, showWarnings = FALSE)
-dir.create("results/figures", recursive = TRUE, showWarnings = FALSE)
-
+# imput
 input_data_path <- "data/processed/rhc-processed-data.csv"
 var_set_path <- "data/processed/rhc-var-sets.rds"
+
+# output
 output_table_path <- "results/tables/estimator-comparison-death30d.csv"
 output_plot_path <- "results/figures/estimator-comparison-death30d.png"
 
+output_tex_ate_path <- "results/tables/ate-comparison-death30d.tex"
+output_tex_att_path <- "results/tables/att-comparison-death30d.tex"
+
+# bootstrapping CI
 bootstrap_B <- 200
 bootstrap_seed <- 2026
 conf_level <- 0.95
+
+
+# Main ----------------------------------------------------------------------------------------
 
 rhc <- fread(input_data_path)
 var_sets <- readr::read_rds(var_set_path)
@@ -63,7 +77,8 @@ covariates <- var_sets$adjustment_sets$basic
 estimate_naive <- function(data, outcome_var, treat_var) {
     A <- data[[treat_var]]
     Y <- data[[outcome_var]]
-    mean(Y[A == 1]) - mean(Y[A == 0])
+    tau <- mean(Y[A == 1]) - mean(Y[A == 0])
+    return(tau)
 }
 
 estimate_naive_se <- function(data, outcome_var, treat_var) {
@@ -71,7 +86,8 @@ estimate_naive_se <- function(data, outcome_var, treat_var) {
     Y <- data[[outcome_var]]
     Y1 <- Y[A == 1]
     Y0 <- Y[A == 0]
-    sqrt(var(Y1) / length(Y1) + var(Y0) / length(Y0))
+    se <- sqrt(var(Y1) / length(Y1) + var(Y0) / length(Y0))
+    return(se)
 }
 
 estimate_regression_ate <- function(data, outcome_var, treat_var, covariates) {
@@ -79,13 +95,16 @@ estimate_regression_ate <- function(data, outcome_var, treat_var, covariates) {
         make_outcome_formula(outcome_var, treat_var, covariates),
         data = data
     )
+    # NOTE: transform will fail since treat_var is character
     data1 <- copy(data)
     data0 <- copy(data)
     data1[, (treat_var) := 1]
     data0[, (treat_var) := 0]
+
     mu1 <- predict(fit, newdata = data1)
     mu0 <- predict(fit, newdata = data0)
-    mean(mu1 - mu0)
+    tau <- mean(mu1 - mu0)
+    return(tau)
 }
 
 estimate_regression_att <- function(data, outcome_var, treat_var, covariates) {
@@ -93,17 +112,25 @@ estimate_regression_att <- function(data, outcome_var, treat_var, covariates) {
         make_outcome_formula(outcome_var, treat_var, covariates),
         data = data
     )
+
     treated_data <- data[data[[treat_var]] == 1, ]
     treated_data1 <- copy(treated_data)
     treated_data0 <- copy(treated_data)
-    treated_data1[, (treat_var) := 1]
+
+    # NOTE: prolly should use raw Y(1) instead of \hatY(1)
+    # treated_data1[, (treat_var) := 1]
     treated_data0[, (treat_var) := 0]
-    mu1 <- predict(fit, newdata = treated_data1)
+
+    # mu1 <- predict(fit, newdata = treated_data1)
+    mu1 <- treated_data1[[outcome_var]]
     mu0 <- predict(fit, newdata = treated_data0)
-    mean(mu1 - mu0)
+
+    tau <- mean(mu1 - mu0)
+    return(tau)
 }
 
 extract_matching_se <- function(matching_fit) {
+    #NOTE: handle the error
     if (!is.null(matching_fit$se)) {
         return(as.numeric(matching_fit$se[[1]]))
     } else {
@@ -134,27 +161,25 @@ estimate_matching_row <- function(
             covariates,
             return_details = TRUE
         )
-    } else {
-        stop("estimand must be ATE or ATT.")
     }
 
-    data.table(
+    res <- data.table(
         Estimand = estimand,
         Method = "PS matching",
         Estimate = as.numeric(matching_result$estimate),
         SE = extract_matching_se(matching_result$fit)
     )
+    return(res)
 }
 
 estimate_all_methods <- function(
     data,
     outcome_var,
     treat_var,
-    covariates,
-    include_matching = TRUE
+    covariates
 ) {
     comparison <- data.table(
-        Estimand = c("Crude", rep("ATE", 3), rep("ATT", 3)),
+        Estimand = c("Naive", rep("ATE", 3), rep("ATT", 3)),
         Method = c(
             "Naive comparison",
             rep(
@@ -177,17 +202,16 @@ estimate_all_methods <- function(
         )
     )
 
-    if (!include_matching) {
-        return(comparison)
-    }
-
     matching_rows <- rbindlist(list(
         estimate_matching_row(data, outcome_var, treat_var, covariates, "ATE"),
         estimate_matching_row(data, outcome_var, treat_var, covariates, "ATT")
     ))
 
-    rbindlist(list(comparison, matching_rows), fill = TRUE)
+    res <- rbindlist(list(comparison, matching_rows), fill = TRUE)
+
+    return(res)
 }
+
 
 estimate_bootstrap_methods <- function(
     data,
@@ -241,12 +265,14 @@ bootstrap_estimates <- replicate(
     }
 )
 
+# point estimation
 bootstrap_methods <- estimate_bootstrap_methods(
     rhc,
     outcome_var = outcome_var,
     treat_var = treat_var,
     covariates = covariates
 )[, .(Estimand, Method)]
+# se
 bootstrap_methods[, SE := apply(bootstrap_estimates, 1, sd)]
 
 comparison <- merge(
@@ -255,6 +281,7 @@ comparison <- merge(
     by = c("Estimand", "Method"),
     all.x = TRUE
 )
+# combine non-bs and bs results
 comparison[, SE := fcoalesce(SE.x, SE.y)]
 comparison[, c("SE.x", "SE.y") := NULL]
 comparison[
@@ -284,7 +311,6 @@ comparison[,
         )
     )
 ]
-setorder(comparison, Estimand, Method)
 
 comparison_table <- comparison[, .(
     Estimand,
@@ -296,6 +322,83 @@ comparison_table <- comparison[, .(
 
 fwrite(comparison_table, output_table_path)
 
+
+# Post-processing -----------------------------------------------------------------------------
+#' For tex table results
+
+# 1. ATE results table
+
+ATE_RES_LABEL <- "tab:ate_estimates"
+
+comparison_df <- fread(output_table_path)
+
+ate_df <- comparison_df[Estimand != "ATT"]
+ate_df <- ate_df[order(factor(
+    Method,
+    levels = c(
+        "Naive comparison",
+        "Regression adjustment",
+        "PS matching",
+        "Hajek IPW",
+        "AIPW"
+    )
+))]
+
+
+x_tab <- xtable(
+    ate_df,
+    caption = "ATE by different causal estimators",
+    label = ATE_RES_LABEL,
+    align = "rllccc",
+    digits = 4
+)
+# add notes
+note_text <- "\\hline \n \\multicolumn{5}{l}{\\small Note: The SE for IPW, AIPW were obtained with bootstrapping with 200 times.} \n"
+# output
+print(
+    x_tab,
+    include.rownames = FALSE,
+    booktabs = TRUE,
+    caption.placement = "top",
+    add.to.row = list(pos = list(nrow(x_tab)), command = note_text), # <- 核心在這
+    file = output_tex_ate_path
+)
+
+
+# 2. ATT results table
+
+ATT_RES_LABEL <- "tab:att_estimates"
+
+att_df <- comparison_df[Estimand == "ATT"]
+att_df <- att_df[order(factor(
+    Method,
+    levels = c(
+        "Regression adjustment",
+        "PS matching",
+        "Hajek IPW",
+        "AIPW"
+    )
+))]
+
+
+x_tab <- xtable(
+    att_df,
+    caption = "ATT by different causal estimators",
+    label = ATT_RES_LABEL,
+    align = "rllccc",
+    digits = 4
+)
+# add notes
+note_text <- "\\hline \n \\multicolumn{5}{l}{\\small Note: The SE for IPW, AIPW were obtained with bootstrapping with 200 times.} \n"
+# output
+print(
+    x_tab,
+    include.rownames = FALSE,
+    booktabs = TRUE,
+    caption.placement = "top",
+    add.to.row = list(pos = list(nrow(x_tab)), command = note_text),
+    file = output_tex_att_path
+)
 
 # Plot ----------------------------------------------------------------------------------------
 
@@ -320,15 +423,12 @@ comparison_plot <- ggplot(
         color = "Estimand",
         title = "RHC effect estimates for 30-day mortality",
         subtitle = sprintf(
-            "Naive and matching use analytic SEs; other bars use %s bootstrap resamples",
+            "IPW, AIPW use %s bootstrap resamples",
             bootstrap_B
         )
     ) +
-    theme_minimal() +
-    theme(
-        panel.grid.major.y = element_blank(),
-        legend.position = "bottom"
-    )
+    theme_minimal()
+comparison_plot
 
 ggsave(
     filename = output_plot_path,
