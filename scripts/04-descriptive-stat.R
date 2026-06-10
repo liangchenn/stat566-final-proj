@@ -1,6 +1,6 @@
 #' README:
 #' -------
-#' - author: ...
+#' - author: Liang-Cheng Chen
 #' - date: 2026-05-27
 #'
 #' Desc:
@@ -158,11 +158,13 @@ desc_table <- rbind(
     rbindlist(lapply(basic_vars, summarize_one))
 )
 
+# save table
 fwrite(desc_table, output_csv_path)
 
 
 # Stargazer LaTeX output ----------------------------------------------------------------------
 
+# output tex table
 stargazer(
     as.data.frame(desc_table),
     type = "latex",

@@ -95,7 +95,7 @@ balance <- rbindlist(lapply(covariates, function(var) {
     )
 }))
 
-balance[order(-raw)]
+balance[order(-raw)] |> head()
 ```
 
 ```{r love-plot, fig.width=7, fig.height=5}
@@ -105,7 +105,7 @@ balance_long <- melt(
     variable.name = "sample",
     value.name = "abs_smd"
 )
-balance_long[, covariate := factor(covariate, levels = balance[order(raw), covariate])]
+balance_long[, covariate := factor(covariate, levels = balance[order(raw), covariate])] |> invisible()
 
 love_plot <- ggplot(balance_long, aes(x = covariate, y = abs_smd, color = sample)) +
     geom_point(size = 2.2) +
@@ -122,10 +122,23 @@ love_plot <- ggplot(balance_long, aes(x = covariate, y = abs_smd, color = sample
 love_plot
 ```
 
+
 ## Propensity-score overlap
 
+```{r}
+rhc[
+    , `:=`(
+        ps = ps,
+        ate_weight = (A / ps) + ((1 - A) / (1 - ps)),
+        att_weight = A + (1 - A) * ps / (1 - ps)
+    )
+] |> invisible()
+```
+
+
 ```{r propensity-score-overlap, fig.width=7, fig.height=4.5}
-overlap_plot <- ggplot(rhc, aes(x = ps, fill = factor(get(treat_var)))) +
+ggplot(rhc) +
+    aes(x = ps, fill = factor(get(treat_var)))+
     geom_density(alpha = 0.45) +
     labs(
         x = "Estimated propensity score",
@@ -134,9 +147,34 @@ overlap_plot <- ggplot(rhc, aes(x = ps, fill = factor(get(treat_var)))) +
         title = "Propensity score overlap by treatment group"
     ) +
     theme_minimal()
-
-overlap_plot
 ```
+
+```{r}
+ggplot(rhc) +
+    aes(x = ps, fill = factor(get(treat_var)), weight = ate_weight)+
+    geom_density(alpha = 0.45) +
+    labs(
+        x = "Estimated propensity score",
+        y = "Density",
+        fill = "RHC",
+        title = "Propensity score overlap by treatment group"
+    ) +
+    theme_minimal()
+```
+
+```{r}
+ggplot(rhc) +
+    aes(x = ps, fill = factor(get(treat_var)), weight = att_weight)+
+    geom_density(alpha = 0.45) +
+    labs(
+        x = "Estimated propensity score",
+        y = "Density",
+        fill = "RHC",
+        title = "Propensity score overlap by treatment group"
+    ) +
+    theme_minimal()
+```
+
 
 ## Findings
 
