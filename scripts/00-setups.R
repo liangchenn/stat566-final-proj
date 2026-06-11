@@ -2,7 +2,7 @@
 #' -------
 #' - author: ...
 #' - date: 2026-05-25
-#' 
+#'
 #' - Desc:
 #'  - This file prepares relevant setups for the project.
 
@@ -12,40 +12,46 @@ cat(sprintf("...Running %s ...", .FILE_NAME))
 # Packages ------------------------------------------------------------------------------------
 
 .required_pkgs <- c(
+    # low-level dependencies
+    "rlang",
+
     # RHC data
     "Hmisc",
     "ATbounds",
-    
+
     # data wrangling
     "data.table",
     "dplyr",
+    "readr",
     "tidyverse",
-    
+
     # estimation, analysis
     "fixest",
     "sensemakr",
     "stargazer",
-    
+    "xtable",
+    "EValue",
+
     # causal
     "dagitty",
     "MatchIt",
     "Matching",
-    
+
     # DAG
     "dagitty",
-    "ggdag"
+    "ggdag",
+    "ggplot2"
 )
 
 
 for (.pkg in .required_pkgs) {
-    if (.pkg %in% installed.packages()) {
-        next
-    }
-    tryCatch({
-        install.packages(.pkg)  
-    }, error = function(err) {
-        cat(sprintf("got error when installing pkg=%s", .pkg))
-    }
+    tryCatch(
+        {
+            install.packages(.pkg)
+        },
+        error = function(err) {
+            cat(sprintf("got error when installing pkg=%s", .pkg))
+        }
     )
 }
 
