@@ -12,13 +12,11 @@
 #' - results/figures/rhc-dag-ggdag.png
 #' - results/figures/rhc-dag-ggdag.pdf
 
-
 # Packages ------------------------------------------------------------------------------------
 library(data.table)
 library(dagitty)
 library(ggdag)
 library(ggplot2)
-
 
 
 # Main ----------------------------------------------------------------------------------------
@@ -30,7 +28,8 @@ output_pdf_path <- "results/figures/rhc-dag-ggdag.pdf"
 rhc <- fread("data/processed/rhc-processed-data.csv")
 
 # dag construction
-rhc_dag <- dagitty("dag {
+rhc_dag <- dagitty(
+    "dag {
   cat1 -> pafi1;
   cat1 -> scoma1;
   cat1 -> RHC;
@@ -54,20 +53,37 @@ rhc_dag <- dagitty("dag {
   aps1 -> RHC;
   dnr1_Yes -> survival;
   RHC -> survival
-}")
+}"
+)
 
 # plotting
 coordinates(rhc_dag) <- list(
-    x = c(cat1 = 0, age = 0, chfhx = 0, 
-          pafi1 = 1, meanbp1 = 1, scoma1 = 1, 
-          aps1 = 2, dnr1_Yes = 2, 
-          RHC = 3, survival = 3),
-    
+    x = c(
+        cat1 = 0,
+        age = 0,
+        chfhx = 0,
+        pafi1 = 1,
+        meanbp1 = 1,
+        scoma1 = 1,
+        aps1 = 2,
+        dnr1_Yes = 2,
+        RHC = 3,
+        survival = 3
+    ),
+
     # Staggered Y-coordinates to dodge straight lines
-    y = c(cat1 = 0, age = 2, chfhx = 4, 
-          pafi1 = -1, meanbp1 = 2, scoma1 = 5, 
-          aps1 = 0.5, dnr1_Yes = 3.5, 
-          RHC = 0, survival = 2.5)
+    y = c(
+        cat1 = 0,
+        age = 2,
+        chfhx = 4,
+        pafi1 = -1,
+        meanbp1 = 2,
+        scoma1 = 5,
+        aps1 = 0.5,
+        dnr1_Yes = 3.5,
+        RHC = 0,
+        survival = 2.5
+    )
 )
 
 # 1. Base dagitty plot
@@ -95,4 +111,4 @@ ggsave(
     height = 5.5
 )
 
-print(dag_plot)
+# print(dag_plot)
