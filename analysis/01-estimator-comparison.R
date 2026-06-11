@@ -298,7 +298,7 @@ comparison[, ci_low := Estimate - z_value * SE]
 comparison[, ci_high := Estimate + z_value * SE]
 comparison[, `95%CI` := sprintf("[%.4f, %.4f]", ci_low, ci_high)]
 
-comparison[, Estimand := factor(Estimand, levels = c("Crude", "ATE", "ATT"))]
+comparison[, Estimand := factor(Estimand, levels = c("Naive", "ATE", "ATT"))]
 comparison[,
     Method := factor(
         Method,
