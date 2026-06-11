@@ -18,7 +18,7 @@
 #' - results/tables/estimator-comparison-death30d.csv
 #' - results/figures/estimator-comparison-death30d.png
 
-.FILE_NAME <- "00-estimator-comparison.R"
+.FILE_NAME <- "01-estimator-comparison.R"
 cat(sprintf("...Running %s ...", .FILE_NAME))
 
 
@@ -353,6 +353,7 @@ x_tab <- xtable(
     digits = 4
 )
 # add notes
+note_text <- "\\addlinespace \n \\multicolumn{5}{l}{\\small Note: The SE for IPW, AIPW were obtained with bootstrapping with 200 times.} \\\\ \n"
 # output
 print(
     x_tab,
