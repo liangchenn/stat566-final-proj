@@ -71,7 +71,7 @@ coordinates(rhc_dag) <- list(
 )
 
 # 1. Base dagitty plot
-plot(rhc_dag)
+# plot(rhc_dag)
 
 # 2. Presentation-ready plot using ggdag
 dag_plot <- ggdag(rhc_dag, text = FALSE, use_labels = "name") +
