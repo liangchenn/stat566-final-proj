@@ -1,12 +1,12 @@
 #' README:
 #' -------
 #' - author: Liang-Cheng Chen
-#' - date: 2026-06-05
+#' - date: 2026-06-10
 #'
 #' Desc:
 #' -------
 #' This file compares naive, regression-adjusted, IPW, matching, and AIPW
-#' odds-ratio estimates for the RHC effect on 30-day mortality.
+#' risk-ratio estimates for the RHC effect on 30-day mortality.
 #'
 #' Input
 #' -----
@@ -15,10 +15,11 @@
 #'
 #' Output
 #' ------
-#' - results/tables/odds-ratio-estimator-comparison-death30d.csv
-#' - results/figures/odds-ratio-estimator-comparison-death30d.png
+#' - results/tables/risk-ratio-estimator-comparison-death30d.csv
+#' - results/tables/risk-ratio-comparison-death30d.tex
+#' - results/figures/risk-ratio-estimator-comparison-death30d.png
 
-.FILE_NAME <- "02-odds-ratio-estimator-comparison.R"
+.FILE_NAME <- "02-risk-ratio-comparison.R"
 cat(sprintf("...Running %s ...", .FILE_NAME))
 
 
@@ -26,6 +27,7 @@ cat(sprintf("...Running %s ...", .FILE_NAME))
 library(data.table)
 library(readr)
 library(ggplot2)
+library(xtable)
 
 source("estimators/utils.R")
 
@@ -35,9 +37,9 @@ source("estimators/utils.R")
 input_data_path <- "data/processed/rhc-processed-data.csv"
 var_set_path <- "data/processed/rhc-var-sets.rds"
 
-output_table_path <- "results/tables/odds-ratio-estimator-comparison-death30d.csv"
-output_plot_path <- "results/figures/odds-ratio-estimator-comparison-death30d.png"
-output_tex_path <- "results/tables/odds-ratio-comparison-death30d.tex"
+output_table_path <- "results/tables/risk-ratio-estimator-comparison-death30d.csv"
+output_plot_path <- "results/figures/risk-ratio-estimator-comparison-death30d.png"
+output_tex_path <- "results/tables/risk-ratio-comparison-death30d.tex"
 
 bootstrap_B <- 200
 bootstrap_seed <- 2026
@@ -54,22 +56,19 @@ treat_var <- var_sets$treatment
 covariates <- var_sets$adjustment_sets$basic
 
 
-# Odds-ratio helpers --------------------------------------------------------------------------
+# Risk-ratio helpers --------------------------------------------------------------------------
 
-make_odd_ratio <- function(p1, p0) {
-    # eps = 1e-6
-    # p1 <- pmin(pmax(p1, eps), 1 - eps)
-    # p0 <- pmin(pmax(p0, eps), 1 - eps)
-    odd_ratio <- (p1 / (1 - p1)) / (p0 / (1 - p0))
+make_risk_ratio <- function(p1, p0) {
+    p1 / p0
 }
 
-estimate_naive_or <- function(data, outcome_var, treat_var) {
+estimate_naive_rr <- function(data, outcome_var, treat_var) {
     A <- data[[treat_var]]
     Y <- data[[outcome_var]]
-    make_odd_ratio(mean(Y[A == 1]), mean(Y[A == 0]))
+    make_risk_ratio(mean(Y[A == 1]), mean(Y[A == 0]))
 }
 
-estimate_naive_log_or_se <- function(
+estimate_naive_log_rr_se <- function(
     data,
     outcome_var,
     treat_var,
@@ -83,16 +82,19 @@ estimate_naive_log_or_se <- function(
     n01 <- sum(A == 0 & Y == 1)
     n00 <- sum(A == 0 & Y == 0)
 
+    n1 <- n11 + n10
+    n0 <- n01 + n00
+
     sqrt(
         1 /
-            (n11 + correction) +
-            1 / (n10 + correction) +
-            1 / (n01 + correction) +
-            1 / (n00 + correction)
+            (n11 + correction) -
+            1 / (n1 + correction) +
+            1 / (n01 + correction) -
+            1 / (n0 + correction)
     )
 }
 
-estimate_regression_ate_or <- function(
+estimate_regression_ate_rr <- function(
     data,
     outcome_var,
     treat_var,
@@ -111,10 +113,10 @@ estimate_regression_ate_or <- function(
 
     p1 <- mean(predict(fit, newdata = data1, type = "response"))
     p0 <- mean(predict(fit, newdata = data0, type = "response"))
-    make_odd_ratio(p1, p0)
+    make_risk_ratio(p1, p0)
 }
 
-estimate_regression_att_or <- function(
+estimate_regression_att_rr <- function(
     data,
     outcome_var,
     treat_var,
@@ -134,10 +136,10 @@ estimate_regression_att_or <- function(
 
     p1 <- mean(predict(fit, newdata = treated_data1, type = "response"))
     p0 <- mean(predict(fit, newdata = treated_data0, type = "response"))
-    make_odd_ratio(p1, p0)
+    make_risk_ratio(p1, p0)
 }
 
-estimate_ate_ipw_or <- function(
+estimate_ate_ipw_rr <- function(
     data,
     outcome_var,
     treat_var,
@@ -152,10 +154,10 @@ estimate_ate_ipw_or <- function(
     w0 <- (1 - A) / (1 - ps)
     p1 <- sum(w1 * Y) / sum(w1)
     p0 <- sum(w0 * Y) / sum(w0)
-    make_odd_ratio(p1, p0)
+    make_risk_ratio(p1, p0)
 }
 
-estimate_att_ipw_or <- function(
+estimate_att_ipw_rr <- function(
     data,
     outcome_var,
     treat_var,
@@ -169,10 +171,10 @@ estimate_att_ipw_or <- function(
     w0 <- (1 - A) * ps / (1 - ps)
     p1 <- mean(Y[A == 1])
     p0 <- sum(w0 * Y) / sum(w0)
-    make_odd_ratio(p1, p0)
+    make_risk_ratio(p1, p0)
 }
 
-estimate_ate_aipw_or <- function(
+estimate_ate_aipw_rr <- function(
     data,
     outcome_var,
     treat_var,
@@ -198,10 +200,10 @@ estimate_ate_aipw_or <- function(
 
     p1 <- mean(mu1 + A * (Y - mu1) / ps)
     p0 <- mean(mu0 + (1 - A) * (Y - mu0) / (1 - ps))
-    make_odd_ratio(p1, p0)
+    make_risk_ratio(p1, p0)
 }
 
-estimate_att_aipw_or <- function(
+estimate_att_aipw_rr <- function(
     data,
     outcome_var,
     treat_var,
@@ -222,10 +224,10 @@ estimate_att_aipw_or <- function(
 
     p1 <- mean(Y[A == 1])
     p0 <- mean(A * mu0 + (1 - A) * ps / (1 - ps) * (Y - mu0)) / mean(A)
-    make_odd_ratio(p1, p0)
+    make_risk_ratio(p1, p0)
 }
 
-estimate_ps_matching_or <- function(
+estimate_ps_matching_rr <- function(
     data,
     outcome_var,
     treat_var,
@@ -255,10 +257,10 @@ estimate_ps_matching_or <- function(
         data[[outcome_var]][matching_fit$index.control],
         matching_fit$weights
     )
-    make_odd_ratio(p1, p0)
+    make_risk_ratio(p1, p0)
 }
 
-estimate_ps_matching_log_or_se <- function(
+estimate_ps_matching_log_rr_se <- function(
     data,
     outcome_var,
     treat_var,
@@ -290,12 +292,15 @@ estimate_ps_matching_log_or_se <- function(
     n01 <- sum(weights * y0)
     n00 <- sum(weights * (1 - y0))
 
+    n1 <- n11 + n10
+    n0 <- n01 + n00
+
     sqrt(
         1 /
-            (n11 + correction) +
-            1 / (n10 + correction) +
-            1 / (n01 + correction) +
-            1 / (n00 + correction)
+            (n11 + correction) -
+            1 / (n1 + correction) +
+            1 / (n01 + correction) -
+            1 / (n0 + correction)
     )
 }
 
@@ -315,37 +320,37 @@ estimate_all_methods <- function(data, outcome_var, treat_var, covariates) {
             )
         ),
         Estimate = c(
-            estimate_naive_or(data, outcome_var, treat_var),
-            estimate_regression_ate_or(
+            estimate_naive_rr(data, outcome_var, treat_var),
+            estimate_regression_ate_rr(
                 data,
                 outcome_var,
                 treat_var,
                 covariates
             ),
-            estimate_ate_ipw_or(data, outcome_var, treat_var, covariates),
-            estimate_ps_matching_or(
+            estimate_ate_ipw_rr(data, outcome_var, treat_var, covariates),
+            estimate_ps_matching_rr(
                 data,
                 outcome_var,
                 treat_var,
                 covariates,
                 estimand = "ATE"
             ),
-            estimate_ate_aipw_or(data, outcome_var, treat_var, covariates),
-            estimate_regression_att_or(
+            estimate_ate_aipw_rr(data, outcome_var, treat_var, covariates),
+            estimate_regression_att_rr(
                 data,
                 outcome_var,
                 treat_var,
                 covariates
             ),
-            estimate_att_ipw_or(data, outcome_var, treat_var, covariates),
-            estimate_ps_matching_or(
+            estimate_att_ipw_rr(data, outcome_var, treat_var, covariates),
+            estimate_ps_matching_rr(
                 data,
                 outcome_var,
                 treat_var,
                 covariates,
                 estimand = "ATT"
             ),
-            estimate_att_aipw_or(data, outcome_var, treat_var, covariates)
+            estimate_att_aipw_rr(data, outcome_var, treat_var, covariates)
         )
     )
 }
@@ -366,23 +371,23 @@ estimate_bootstrap_methods <- function(
             ),
             2
         ),
-        log_or = log(c(
-            estimate_regression_ate_or(
+        log_rr = log(c(
+            estimate_regression_ate_rr(
                 data,
                 outcome_var,
                 treat_var,
                 covariates
             ),
-            estimate_ate_ipw_or(data, outcome_var, treat_var, covariates),
-            estimate_ate_aipw_or(data, outcome_var, treat_var, covariates),
-            estimate_regression_att_or(
+            estimate_ate_ipw_rr(data, outcome_var, treat_var, covariates),
+            estimate_ate_aipw_rr(data, outcome_var, treat_var, covariates),
+            estimate_regression_att_rr(
                 data,
                 outcome_var,
                 treat_var,
                 covariates
             ),
-            estimate_att_ipw_or(data, outcome_var, treat_var, covariates),
-            estimate_att_aipw_or(data, outcome_var, treat_var, covariates)
+            estimate_att_ipw_rr(data, outcome_var, treat_var, covariates),
+            estimate_att_aipw_rr(data, outcome_var, treat_var, covariates)
         ))
     )
 }
@@ -396,10 +401,10 @@ comparison <- estimate_all_methods(
     treat_var = treat_var,
     covariates = covariates
 )
-comparison[, log_or := log(Estimate)]
+comparison[, log_rr := log(Estimate)]
 
 set.seed(bootstrap_seed)
-bootstrap_log_or <- replicate(
+bootstrap_log_rr <- replicate(
     bootstrap_B,
     {
         idx <- sample(nrow(rhc), replace = TRUE)
@@ -409,7 +414,7 @@ bootstrap_log_or <- replicate(
             outcome_var = outcome_var,
             treat_var = treat_var,
             covariates = covariates
-        )$log_or
+        )$log_rr
     }
 )
 
@@ -419,7 +424,7 @@ bootstrap_methods <- estimate_bootstrap_methods(
     treat_var = treat_var,
     covariates = covariates
 )[, .(Estimand, Method)]
-bootstrap_methods[, log_or_se := apply(bootstrap_log_or, 1, sd)]
+bootstrap_methods[, log_rr_se := apply(bootstrap_log_rr, 1, sd)]
 
 comparison <- merge(
     comparison,
@@ -429,7 +434,7 @@ comparison <- merge(
 )
 comparison[
     Method == "Naive comparison",
-    log_or_se := estimate_naive_log_or_se(
+    log_rr_se := estimate_naive_log_rr_se(
         rhc,
         outcome_var,
         treat_var
@@ -437,7 +442,7 @@ comparison[
 ]
 comparison[
     Estimand == "ATE" & Method == "PS matching",
-    log_or_se := estimate_ps_matching_log_or_se(
+    log_rr_se := estimate_ps_matching_log_rr_se(
         rhc,
         outcome_var,
         treat_var,
@@ -447,7 +452,7 @@ comparison[
 ]
 comparison[
     Estimand == "ATT" & Method == "PS matching",
-    log_or_se := estimate_ps_matching_log_or_se(
+    log_rr_se := estimate_ps_matching_log_rr_se(
         rhc,
         outcome_var,
         treat_var,
@@ -457,9 +462,9 @@ comparison[
 ]
 
 z_value <- qnorm(1 - (1 - conf_level) / 2)
-comparison[, SE := Estimate * log_or_se]
-comparison[, ci_low := exp(log_or - z_value * log_or_se)]
-comparison[, ci_high := exp(log_or + z_value * log_or_se)]
+comparison[, SE := Estimate * log_rr_se]
+comparison[, ci_low := exp(log_rr - z_value * log_rr_se)]
+comparison[, ci_high := exp(log_rr + z_value * log_rr_se)]
 comparison[, `95%CI` := sprintf("[%.4f, %.4f]", ci_low, ci_high)]
 
 comparison[, Estimand := factor(Estimand, levels = c("Naive", "ATE", "ATT"))]
@@ -487,26 +492,34 @@ comparison_table <- comparison[, .(
 
 fwrite(comparison_table, output_table_path)
 
+
 # Post-Processing for tex table ---------------------------------------------------------------
 
-TAB_LABEL <- "tab:or_estimates"
+TAB_LABEL <- "tab:rr_estimates"
 
 x_tab <- xtable(
     comparison_table,
-    caption = "Odds Ratio Results by different causal estimators",
+    caption = "Risk Ratio Results by different causal estimators",
     label = TAB_LABEL,
     align = "rllccc",
     digits = 4
 )
-# add notes
-note_text <- "\\hline \n \\multicolumn{5}{l}{\\small Note: The SE for IPW, AIPW were obtained with bootstrapping with 200 times.} \n"
-# output
+
+note_text <- sprintf(
+    paste0(
+        "\\hline \n",
+        "\\multicolumn{5}{l}{\\small Note: Regression adjustment, IPW, and AIPW SEs ",
+        "were obtained with %s bootstrap resamples on the log-risk-ratio scale.} \n"
+    ),
+    bootstrap_B
+)
+
 print(
     x_tab,
     include.rownames = FALSE,
     booktabs = TRUE,
     caption.placement = "top",
-    add.to.row = list(pos = list(nrow(x_tab)), command = note_text), # <- 核心在這
+    add.to.row = list(pos = list(nrow(x_tab)), command = note_text),
     file = output_tex_path
 )
 
@@ -516,7 +529,7 @@ print(
 comparison[, label := paste(Estimand, Method, sep = ": ")]
 comparison[, label := factor(label, levels = rev(label))]
 
-or_plot <- ggplot(comparison, aes(x = label, y = Estimate, color = Estimand)) +
+rr_plot <- ggplot(comparison, aes(x = label, y = Estimate, color = Estimand)) +
     geom_errorbar(
         aes(ymin = ci_low, ymax = ci_high),
         width = 0.18,
@@ -528,11 +541,11 @@ or_plot <- ggplot(comparison, aes(x = label, y = Estimate, color = Estimand)) +
     coord_flip() +
     labs(
         x = NULL,
-        y = "Estimated odds ratio, log scale",
+        y = "Estimated risk ratio, log scale",
         color = "Estimand",
-        title = "RHC odds-ratio estimates for 30-day mortality",
+        title = "RHC risk-ratio estimates for 30-day mortality",
         subtitle = sprintf(
-            "Naive and matching use analytic log-OR SEs; other bars use %s bootstrap resamples",
+            "Naive and matching use analytic log-RR SEs; other bars use %s bootstrap resamples",
             bootstrap_B
         )
     ) +
@@ -544,7 +557,7 @@ or_plot <- ggplot(comparison, aes(x = label, y = Estimate, color = Estimand)) +
 
 ggsave(
     filename = output_plot_path,
-    plot = or_plot,
+    plot = rr_plot,
     width = 8,
     height = 5,
     dpi = 300
