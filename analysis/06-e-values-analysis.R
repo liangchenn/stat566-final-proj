@@ -30,6 +30,7 @@ library(data.table)
 library(readr)
 library(ggplot2)
 library(EValue)
+library(xtable)
 
 source("estimators/utils.R")
 
@@ -41,7 +42,14 @@ var_set_path <- "data/processed/rhc-var-sets.rds"
 
 output_ate_table_path <- "results/tables/evalue-sensitivity-ate-death30d.csv"
 output_ate_benchmark_path <- "results/tables/evalue-benchmark-basic-ate-death30d.csv"
+
+output_table_path <- "results/tables/evalue-sensitivity-death30d.csv"
+output_benchmark_path <- "results/tables/evalue-benchmark-basic-death30d.csv"
+
 output_plot_path <- "results/figures/evalue-sensitivity-death30d.png"
+
+output_tex_path <- "results/tables/evalue-sensitivity-death30d.tex"
+output_benchmark_tex_path <- "results/tables/evalue-benchmark-basic-death30d.tex"
 
 bootstrap_B <- 100
 bootstrap_seed <- 2026
@@ -275,9 +283,9 @@ benchmarks <- benchmarks[order(-weaker_leg), .(
     weaker_leg
 )]
 
-# strongest_benchmark <- benchmarks[1, weaker_leg]
-# results[, strongest_observed_weaker_leg := strongest_benchmark]
-# results[, margin_vs_strongest_observed := evalue_point - strongest_benchmark]
+strongest_benchmark <- benchmarks[1, weaker_leg]
+results[, strongest_observed_weaker_leg := strongest_benchmark]
+results[, margin_vs_strongest_observed := evalue_point - strongest_benchmark]
 
 
 # 5. Output Tables ----------------------------------------------------------------------------
@@ -297,14 +305,86 @@ result_table <- results[
         `95%CI`,
         evalue_point,
         evalue_ci_limit,
-        strongest_observed_weaker_leg,
-        margin_vs_strongest_observed,
         n_bootstrap
     )
 ]
 
 fwrite(result_table, output_ate_table_path)
 fwrite(benchmarks, output_ate_benchmark_path)
+fwrite(result_table, output_table_path)
+fwrite(benchmarks, output_benchmark_path)
+
+
+
+# Post-processing -----------------------------------------------------------------------------
+
+# build latex table
+
+# 1. RR result table
+output_cols <- c(
+    "estimator", "risk_rhc", "risk_no_rhc", "risk_ratio", "rr_se", "95%CI", "evalue_point", "evalue_ci_limit"
+)
+
+evalue_latex_table <- copy(result_table[, ..output_cols])
+setnames(
+    evalue_latex_table,
+    c(
+        "Estimator",
+        "RHC Risk",
+        "No RHC Risk",
+        "RR",
+        "SE",
+        "95% CI",
+        "E-value",
+        "E-value CI"
+    )
+)
+
+x_tab <- xtable(
+    evalue_latex_table,
+    caption = "Evalue and Risk Ratio",
+    label = "tab:evalue_risk_ratios",
+    align = "rlccccccc",
+    digits = 4
+)
+
+note_text <- sprintf(
+    paste0(
+        "\\addlinespace \n",
+        "\\multicolumn{8}{l}{\\small Note: SEs were obtained with %s bootstrap ",
+        "resamples on the risk-ratio scale.} \\\\ \n"
+    ),
+    bootstrap_B
+)
+
+print(
+    x_tab,
+    include.rownames = FALSE,
+    booktabs = TRUE,
+    caption.placement = "top",
+    size = "\\small",
+    scalebox = 0.82,
+    add.to.row = list(pos = list(nrow(evalue_latex_table)), command = note_text),
+    file = output_tex_path
+)
+
+# 2. benchmark table
+x_tab <- xtable(
+    benchmarks,
+    caption = "Covariate Risk Ratio Benchmark",
+    label = "tab:cov_risk_ratios",
+    align = "rlrrr",
+    digits = 4
+)
+print(
+    x_tab,
+    include.rownames = FALSE,
+    booktabs = TRUE,
+    caption.placement = "top",
+    size = "\\small",
+    scalebox = 0.82,
+    file = output_benchmark_tex_path
+)
 
 
 # 6. Plot -------------------------------------------------------------------------------------
