@@ -433,8 +433,8 @@ comparison_plot
 ggsave(
     filename = output_plot_path,
     plot = comparison_plot,
-    width = 7,
-    height = 4.5,
+    width = 8,
+    height = 5,
     dpi = 300
 )
 
