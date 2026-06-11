@@ -499,7 +499,7 @@ x_tab <- xtable(
     digits = 4
 )
 # add notes
-note_text <- "\\hline \n \\multicolumn{5}{l}{\\small Note: The SE for IPW, AIPW were obtained with bootstrapping with 200 times.} \n"
+note_text <- "\\addlinespace \n \\multicolumn{5}{l}{\\small Note: The SE for IPW, AIPW were obtained with bootstrapping with 200 times.} \\\\ \n"
 # output
 print(
     x_tab,

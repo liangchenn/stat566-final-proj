@@ -507,9 +507,9 @@ x_tab <- xtable(
 
 note_text <- sprintf(
     paste0(
-        "\\hline \n",
+        "\\addlinespace \n",
         "\\multicolumn{5}{l}{\\small Note: Regression adjustment, IPW, and AIPW SEs ",
-        "were obtained with %s bootstrap resamples on the log-risk-ratio scale.} \n"
+        "were obtained with %s bootstrap resamples on the log-risk-ratio scale.} \\\\ \n"
     ),
     bootstrap_B
 )
