@@ -1,14 +1,26 @@
 # STAT566 Causal Modeling Final Project
 
+## Project Location
+
+- Github Repo: [Link](https://github.com/liangchenn/stat566-final-proj)
+
+- Overleaf Project: [Link](https://www.overleaf.com/read/yqswbkvkcgqz#f30bf9)
+
+
+
 ## Project Structure
 
 ### Usage
 
 - Execute `main.R` will: 
-    - create analysis dataset from raw data on the Internet
-    - generate all figures and tables we put in the report
+    - create raw data in `data/raw/` from relevant packages
+    - create analysis dataset `data/processed/` from raw data on the Internet
+    - generate all figures and tables we put in the report in `results/{figures, tables}/`
     
-- Or run `make run` in the terminal
+- Or run `$ make run` in the terminal to regenerate all the results we use in the final report.
+- `$ make clean` to clean up all results, processed data and intermediate files.
+
+- `$ make`: to reproduce all results.
 
 ### Overview:
 ```
@@ -27,6 +39,10 @@
 └── scripts/
 ```
 ### Folders
+
+- `final-report.pdf`: The final report
+- `presentation-slides.pdf`: final presentation slides
+
 - `scripts`: reproducible data constructing scripts
 - `analysis`: reproducible analysis results scripts
 - `data/`
@@ -34,31 +50,9 @@
     - `processed`: processed data location
 - `results/` : analysis results location
 - `estimators/`: estimator functions definitions and utils by types
-- `notebooks/`: analysis Rmd, pdf notebook location
+- `notebooks/`: legacy analysis Rmd, pdf notebook location
+- `results/`: all the tables and figures we used in the final report
 
 ## RHC data
 
 - CHECK the `scripts/02-defined-variables.R` for the outcomes, treatment, and different adjustment sets
-
-
-## Progress
-
-- May 12, 2026
-    - progress report
-        - SMD table, love plot, propensity score distribution
-        - new DAG on overleaf
-
-
-- May 19, 2026
-    - Estimator implementation
-        - ~~ATT (Andy)~~
-        - ~~AIPW (Jian)~~
-        - ~~CATE, matching (LC)~~
-
-- May 28, 2026
-    - Robustness Check
-        - ~~trimming area~~
-        - differen adj. sets
-    - Sensitivity analysis
-        - E-values
-    

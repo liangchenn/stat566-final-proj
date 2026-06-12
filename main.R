@@ -38,5 +38,5 @@ source("analysis/03-trimming-sensitivity.R")
 source("analysis/04-adjustment-set-sensitivity.R")
 source("analysis/05-cate-subgroup-analysis.R")
 source("analysis/06-e-values-analysis.R")
-# source("analysis/07-aipw-sensitivity-analysis.R") # will need to install dml.sensemakr
+source("analysis/07-aipw-sensitivity-analysis.R") # will need to install dml.sensemakr
 cat("finished \n\n")
