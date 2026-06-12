@@ -14,7 +14,7 @@ cat(sprintf("...Running %s ...", .FILE_NAME))
 .required_pkgs <- c(
     # pkg dependencies
     "rlang",
-    "devtools"
+    "devtools",
 
     # RHC data
     "Hmisc",
