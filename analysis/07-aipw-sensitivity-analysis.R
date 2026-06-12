@@ -374,17 +374,16 @@ plot <- ggplot(grid, aes(x = r2dz.x, y = r2yz.dx, z = adjusted_estimate)) +
     ) +
     coord_cartesian(xlim = c(0, axis_max), ylim = c(0, axis_max), expand = FALSE) +
     scale_fill_gradient2(
-        low = "#9e3a26",
-        mid = "#f7f7f7",
-        high = "#245f8c",
+        low = "tomato",
+        mid = "lightgrey",
+        high = "steelblue",
         midpoint = 0,
         name = "Adjusted\nestimate"
     ) +
     labs(
-        x = "Partial R2 with AIPW Riesz score",
+        x = "Partial R2 with AIPW",
         y = "Partial R2 with outcome",
-        title = "AIPW sensitivity analysis on the sensemakr-DML scale",
-        subtitle = "Black contour: hidden-confounder strength that attenuates the ATE to zero"
+        title = "AIPW sensitivity analysis with sensemakr-DML"
     ) +
     theme_minimal()
 
