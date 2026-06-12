@@ -12,8 +12,9 @@ cat(sprintf("...Running %s ...", .FILE_NAME))
 # Packages ------------------------------------------------------------------------------------
 
 .required_pkgs <- c(
-    # low-level dependencies
+    # pkg dependencies
     "rlang",
+    "devtools"
 
     # RHC data
     "Hmisc",
@@ -57,6 +58,10 @@ for (.pkg in .required_pkgs) {
 
 invisible(lapply(.required_pkgs, library, character.only = TRUE))
 
+# for dml.sensemakr
+if (!"dml.sensemakr" %in% installed.packages()) {
+    devtools::install_github("carloscinelli/dml.sensemakr")
+}
 
 # Folder Structure ----------------------------------------------------------------------------
 
